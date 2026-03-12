@@ -465,6 +465,7 @@ main{padding-top:68px;min-height:100vh;}
   <div class="nav-right">
     <span class="count-badge" id="headerCount">0 photos</span>
     <button class="nav-btn" onclick="startSlideshow()" id="ssBtn" style="display:none">▷ Slideshow</button>
+    <button class="nav-btn" onclick="openCompile()" id="compileBtn" style="display:none">⬡ Compile</button>
     <button class="nav-btn primary" onclick="openUpload()">+ Add Photo</button>
   </div>
 </header>
@@ -589,6 +590,304 @@ main{padding-top:68px;min-height:100vh;}
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- COMPILE MODAL -->
+<div id="compileModal" style="display:none;position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#131313;border:1px solid #2a2a2a;border-radius:4px;padding:36px;width:100%;max-width:480px;position:relative;">
+    <button onclick="closeCompile()" style="position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:50%;border:1px solid #2a2a2a;background:transparent;color:#4a4540;cursor:pointer;font-size:1rem;">✕</button>
+    <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:1.5rem;margin-bottom:4px;color:#f0ebe2;">Compile Collection</div>
+    <div style="font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.2em;color:#4a4540;text-transform:uppercase;margin-bottom:24px;">Export as PDF or Image Sheet</div>
+
+    <div style="margin-bottom:16px;">
+      <label style="font-family:'DM Mono',monospace;font-size:.6rem;color:#4a4540;letter-spacing:.18em;text-transform:uppercase;display:block;margin-bottom:8px;">Which photos?</label>
+      <div style="display:flex;gap:8px;">
+        <button class="compile-scope active" data-scope="all" onclick="setScope(this,'all')" style="flex:1;padding:8px;border:1px solid #c9a96e;border-radius:2px;background:rgba(201,169,110,.15);color:#c9a96e;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;">All Photos</button>
+        <button class="compile-scope" data-scope="filtered" onclick="setScope(this,'filtered')" style="flex:1;padding:8px;border:1px solid #2a2a2a;border-radius:2px;background:transparent;color:#4a4540;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;">Current Filter</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <label style="font-family:'DM Mono',monospace;font-size:.6rem;color:#4a4540;letter-spacing:.18em;text-transform:uppercase;display:block;margin-bottom:8px;">Format</label>
+      <div style="display:flex;gap:8px;">
+        <button class="compile-fmt active" data-fmt="pdf" onclick="setFmt(this,'pdf')" style="flex:1;padding:8px;border:1px solid #c9a96e;border-radius:2px;background:rgba(201,169,110,.15);color:#c9a96e;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;">PDF</button>
+        <button class="compile-fmt" data-fmt="image" onclick="setFmt(this,'image')" style="flex:1;padding:8px;border:1px solid #2a2a2a;border-radius:2px;background:transparent;color:#4a4540;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;">Image Sheet</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:24px;">
+      <label style="font-family:'DM Mono',monospace;font-size:.6rem;color:#4a4540;letter-spacing:.18em;text-transform:uppercase;display:block;margin-bottom:8px;">Layout (PDF only)</label>
+      <div style="display:flex;gap:8px;">
+        <button class="compile-layout active" data-layout="1" onclick="setLayout(this,1)" style="flex:1;padding:8px;border:1px solid #c9a96e;border-radius:2px;background:rgba(201,169,110,.15);color:#c9a96e;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;">1 per page</button>
+        <button class="compile-layout" data-layout="2" onclick="setLayout(this,2)" style="flex:1;padding:8px;border:1px solid #2a2a2a;border-radius:2px;background:transparent;color:#4a4540;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;">2 per page</button>
+        <button class="compile-layout" data-layout="4" onclick="setLayout(this,4)" style="flex:1;padding:8px;border:1px solid #2a2a2a;border-radius:2px;background:transparent;color:#4a4540;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;">4 per page</button>
+      </div>
+    </div>
+
+    <div id="compileProgress" style="display:none;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:.65rem;color:#c9a96e;letter-spacing:.1em;text-align:center;"></div>
+
+    <button onclick="runCompile()" style="width:100%;padding:14px;background:#c9a96e;color:#080808;border:none;border-radius:2px;font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;cursor:pointer;font-weight:500;" id="compileRunBtn">Generate & Download</button>
+  </div>
+</div>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+let compileScope = 'all';
+let compileFmt = 'pdf';
+let compileLayout = 1;
+
+function openCompile() {
+  document.getElementById('compileModal').style.display = 'flex';
+}
+function closeCompile() {
+  document.getElementById('compileModal').style.display = 'none';
+  document.getElementById('compileProgress').style.display = 'none';
+}
+
+function setScope(btn, val) {
+  compileScope = val;
+  document.querySelectorAll('.compile-scope').forEach(b => {
+    const on = b.dataset.scope === val;
+    b.style.borderColor = on ? '#c9a96e' : '#2a2a2a';
+    b.style.background = on ? 'rgba(201,169,110,.15)' : 'transparent';
+    b.style.color = on ? '#c9a96e' : '#4a4540';
+  });
+}
+function setFmt(btn, val) {
+  compileFmt = val;
+  document.querySelectorAll('.compile-fmt').forEach(b => {
+    const on = b.dataset.fmt === val;
+    b.style.borderColor = on ? '#c9a96e' : '#2a2a2a';
+    b.style.background = on ? 'rgba(201,169,110,.15)' : 'transparent';
+    b.style.color = on ? '#c9a96e' : '#4a4540';
+  });
+}
+function setLayout(btn, val) {
+  compileLayout = val;
+  document.querySelectorAll('.compile-layout').forEach(b => {
+    const on = parseInt(b.dataset.layout) === val;
+    b.style.borderColor = on ? '#c9a96e' : '#2a2a2a';
+    b.style.background = on ? 'rgba(201,169,110,.15)' : 'transparent';
+    b.style.color = on ? '#c9a96e' : '#4a4540';
+  });
+}
+
+async function runCompile() {
+  const photos = compileScope === 'all' ? gallery : getFiltered();
+  if (!photos.length) { showToast('No photos to compile!'); return; }
+
+  const prog = document.getElementById('compileProgress');
+  const btn = document.getElementById('compileRunBtn');
+  prog.style.display = 'block';
+  btn.disabled = true;
+
+  if (compileFmt === 'pdf') {
+    await compilePDF(photos, prog);
+  } else {
+    await compileImageSheet(photos, prog);
+  }
+
+  btn.disabled = false;
+  prog.style.display = 'none';
+  closeCompile();
+}
+
+async function compilePDF(photos, prog) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const W = 210, H = 297, margin = 14;
+
+  // Cover page
+  doc.setFillColor(8,8,8);
+  doc.rect(0,0,W,H,'F');
+  doc.setDrawColor(201,169,110);
+  doc.setLineWidth(0.4);
+  doc.rect(margin,margin,W-margin*2,H-margin*2);
+  doc.setTextColor(201,169,110);
+  doc.setFont('times','bolditalic');
+  doc.setFontSize(32);
+  doc.text('Chano', W/2, H/2 - 10, {align:'center'});
+  doc.setFontSize(14);
+  doc.setFont('times','italic');
+  doc.text('Photography', W/2, H/2 + 4, {align:'center'});
+  doc.setFontSize(8);
+  doc.setFont('courier','normal');
+  doc.setTextColor(74,69,64);
+  doc.text(photos.length + ' PHOTOGRAPHS', W/2, H/2 + 18, {align:'center'});
+  doc.text(new Date().getFullYear().toString(), W/2, H/2 + 26, {align:'center'});
+
+  const perPage = compileLayout;
+  const slots = getSlots(perPage, W, H, margin);
+
+  let slotIdx = 0;
+  for (let i = 0; i < photos.length; i++) {
+    prog.textContent = `Processing ${i+1} of ${photos.length}...`;
+    const p = photos[i];
+    if (slotIdx === 0) {
+      doc.addPage();
+      doc.setFillColor(8,8,8);
+      doc.rect(0,0,W,H,'F');
+    }
+    const slot = slots[slotIdx];
+    // Load image dimensions
+    const dims = await getImgDims(p.dataUrl);
+    const fitted = fitInBox(dims.w, dims.h, slot.w, slot.h - (perPage > 1 ? 8 : 12));
+    const x = slot.x + (slot.w - fitted.w) / 2;
+    const y = slot.y + (slot.h - fitted.h) / 2 - (perPage > 1 ? 4 : 6);
+    doc.addImage(p.dataUrl, 'JPEG', x, y, fitted.w, fitted.h);
+
+    // Caption
+    if (p.title || p.tag) {
+      doc.setTextColor(201,169,110);
+      doc.setFont('courier','normal');
+      doc.setFontSize(perPage === 1 ? 7.5 : 6);
+      const cap = [p.title, p.tag, p.date].filter(Boolean).join('  ·  ');
+      doc.text(cap, slot.x + slot.w/2, slot.y + slot.h - 1, {align:'center'});
+    }
+
+    slotIdx++;
+    if (slotIdx >= perPage) slotIdx = 0;
+  }
+
+  // Back page
+  doc.addPage();
+  doc.setFillColor(8,8,8);
+  doc.rect(0,0,W,H,'F');
+  doc.setTextColor(201,169,110);
+  doc.setFont('times','italic');
+  doc.setFontSize(11);
+  doc.text('Chano Photography', W/2, H/2, {align:'center'});
+  doc.setFontSize(7);
+  doc.setFont('courier','normal');
+  doc.setTextColor(74,69,64);
+  doc.text(new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long'}), W/2, H/2+10, {align:'center'});
+
+  doc.save('chano-photography.pdf');
+  showToast('PDF downloaded!');
+}
+
+function getSlots(perPage, W, H, margin) {
+  const slots = [];
+  const usableW = W - margin*2, usableH = H - margin*2;
+  if (perPage === 1) {
+    slots.push({x:margin, y:margin, w:usableW, h:usableH});
+  } else if (perPage === 2) {
+    const half = (usableH - 10) / 2;
+    slots.push({x:margin, y:margin, w:usableW, h:half});
+    slots.push({x:margin, y:margin+half+10, w:usableW, h:half});
+  } else {
+    const hw = (usableW - 8) / 2;
+    const hh = (usableH - 8) / 2;
+    slots.push({x:margin, y:margin, w:hw, h:hh});
+    slots.push({x:margin+hw+8, y:margin, w:hw, h:hh});
+    slots.push({x:margin, y:margin+hh+8, w:hw, h:hh});
+    slots.push({x:margin+hw+8, y:margin+hh+8, w:hw, h:hh});
+  }
+  return slots;
+}
+
+function getImgDims(dataUrl) {
+  return new Promise(res => {
+    const i = new Image();
+    i.onload = () => res({w:i.naturalWidth, h:i.naturalHeight});
+    i.src = dataUrl;
+  });
+}
+
+function fitInBox(imgW, imgH, boxW, boxH) {
+  const ratio = Math.min(boxW/imgW, boxH/imgH);
+  return {w: imgW*ratio, h: imgH*ratio};
+}
+
+async function compileImageSheet(photos, prog) {
+  // Build a tall canvas with all photos in a 2-col grid
+  const cols = 2;
+  const cellW = 900;
+  const gap = 12;
+  const labelH = 30;
+  const totalCols = Math.min(cols, photos.length);
+  const rows = Math.ceil(photos.length / cols);
+  const canvasW = cellW * totalCols + gap * (totalCols + 1);
+
+  // First pass: measure heights
+  const cellHeights = await Promise.all(photos.map(p => getImgDims(p.dataUrl).then(d => {
+    const h = Math.round(d.h * (cellW / d.w));
+    return h;
+  })));
+
+  // Row heights = max in that row
+  const rowHeights = [];
+  for (let r = 0; r < rows; r++) {
+    let maxH = 0;
+    for (let c = 0; c < cols; c++) {
+      const i = r*cols+c;
+      if (i < photos.length) maxH = Math.max(maxH, cellHeights[i]);
+    }
+    rowHeights.push(maxH);
+  }
+
+  // Header + footer
+  const headerH = 120, footerH = 80;
+  const totalH = headerH + rowHeights.reduce((a,b)=>a+b,0) + gap*(rows+1) + labelH*rows + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasW; canvas.height = totalH;
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  ctx.fillStyle = '#080808'; ctx.fillRect(0,0,canvasW,totalH);
+
+  // Header
+  ctx.fillStyle = '#c9a96e';
+  ctx.font = `italic bold ${Math.round(headerH*0.38)}px Georgia, serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('Chano Photography', canvasW/2, headerH*0.45);
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(canvasW*0.3, headerH*0.78, canvasW*0.4, 1);
+  ctx.fillStyle = '#4a4540';
+  ctx.font = `${Math.round(headerH*0.14)}px 'Courier New', monospace`;
+  ctx.fillText(photos.length + ' PHOTOGRAPHS  ·  ' + new Date().getFullYear(), canvasW/2, headerH*0.88);
+
+  // Photos
+  let y = headerH + gap;
+  for (let r = 0; r < rows; r++) {
+    let x = gap;
+    for (let c = 0; c < cols; c++) {
+      const idx = r*cols+c;
+      if (idx >= photos.length) break;
+      const p = photos[idx];
+      prog.textContent = `Processing ${idx+1} of ${photos.length}...`;
+      const img = await new Promise(res => {
+        const i = new Image(); i.onload=()=>res(i); i.src=p.dataUrl;
+      });
+      const fh = Math.round(img.naturalHeight * (cellW/img.naturalWidth));
+      ctx.drawImage(img, x, y, cellW, fh);
+      // Caption bar
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(x, y+fh-labelH, cellW, labelH);
+      ctx.fillStyle = '#c9a96e';
+      ctx.font = `${Math.round(labelH*0.42)}px 'Courier New', monospace`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const cap = [p.title||'Untitled', p.tag, p.date].filter(Boolean).join('  ·  ');
+      ctx.fillText(cap, x+12, y+fh-labelH/2);
+      x += cellW + gap;
+    }
+    y += rowHeights[r] + labelH + gap;
+  }
+
+  // Footer
+  ctx.fillStyle = '#c9a96e';
+  ctx.font = `italic ${Math.round(footerH*0.28)}px Georgia, serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('Chano Photography', canvasW/2, totalH - footerH*0.5);
+
+  const url = canvas.toDataURL('image/jpeg', 0.93);
+  const a = document.createElement('a');
+  a.download = 'chano-collection.jpg'; a.href = url; a.click();
+  showToast('Image sheet downloaded!');
+}
+</script>
+
 <script>
 // ── STATE
 let gallery = [];
@@ -603,19 +902,54 @@ let ssProgressTimer = null;
 let isPaused = false;
 let loadedFile = null;
 let loadedDataUrl = null;
+let db = null;
 
-// ── STORAGE
+// ── INDEXEDDB — truly persistent, survives scroll/reload/close
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('chano-gallery-db', 1);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('photos'))
+        d.createObjectStore('photos', { keyPath: 'id' });
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 async function loadGallery() {
   try {
-    const r = await window.storage.get('chano-gallery-v2');
-    if (r) gallery = JSON.parse(r.value);
-  } catch { gallery = []; }
+    db = await openDB();
+    gallery = await new Promise((res, rej) => {
+      const req = db.transaction('photos','readonly').objectStore('photos').getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+    gallery.sort((a,b) => b.id - a.id);
+  } catch(e) { gallery = []; }
   render();
 }
 
-async function saveGallery() {
-  try { await window.storage.set('chano-gallery-v2', JSON.stringify(gallery)); } catch(e){}
+async function savePhoto(photo) {
+  if (!db) return;
+  return new Promise((res,rej) => {
+    const tx = db.transaction('photos','readwrite');
+    tx.objectStore('photos').put(photo);
+    tx.oncomplete = res; tx.onerror = rej;
+  });
 }
+
+async function removePhoto(id) {
+  if (!db) return;
+  return new Promise((res,rej) => {
+    const tx = db.transaction('photos','readwrite');
+    tx.objectStore('photos').delete(id);
+    tx.oncomplete = res; tx.onerror = rej;
+  });
+}
+
+async function saveGallery() { /* no-op — saved per photo */ }
 
 
 // ── RENDER
@@ -637,6 +971,7 @@ function render() {
 
   // Slideshow btn
   document.getElementById('ssBtn').style.display = gallery.length > 1 ? 'block' : 'none';
+  document.getElementById('compileBtn').style.display = gallery.length > 0 ? 'block' : 'none';
 
   // Filter bar
   const allTags = [...new Set(gallery.map(p => p.tag))].filter(Boolean);
@@ -734,19 +1069,20 @@ async function handleMultipleFiles(files) {
   for(const file of files){
     await new Promise(res=>{
       const r=new FileReader();
-      r.onload=e=>{
+      r.onload=async e=>{
         const p={
-          id:Date.now()+Math.random(),
-          dataUrl:e.target.result,
-          title:'',tag:'Untagged',
-          date:new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})
+          id: Date.now()+Math.random(),
+          dataUrl: e.target.result,
+          title:'', tag:'Untagged',
+          date: new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})
         };
-        gallery.unshift(p);res();
+        await savePhoto(p);
+        gallery.unshift(p);
+        res();
       };
       r.readAsDataURL(file);
     });
   }
-  await saveGallery();
   render();
   showToast(`${files.length} photos added!`);
 }
@@ -770,8 +1106,8 @@ async function submitPhoto() {
     tag: document.getElementById('photoTag').value,
     date: new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})
   };
+  await savePhoto(photo);
   gallery.unshift(photo);
-  await saveGallery();
   render();
   closeUpload();
   showToast('Photo added to gallery!');
@@ -780,8 +1116,9 @@ async function submitPhoto() {
 // ── DELETE
 async function deletePhoto(idx) {
   if(!confirm('Delete this photo?')) return;
+  const photo = gallery[idx];
+  await removePhoto(photo.id);
   gallery.splice(idx,1);
-  await saveGallery();
   render();
   showToast('Photo deleted.');
 }
